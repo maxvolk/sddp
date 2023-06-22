@@ -1,0 +1,693 @@
+% Kompiliert mit pdfLaTex
+%
+% Institut für Operations Research
+% Lehrstuhl für stochastische Optimierung
+% Prof. dr. Steffen Rebennack
+%
+%%
+
+\documentclass[a4paper,12pt]{article}
+
+\usepackage[utf8]{inputenc} % Bei Benutzung von Apple-Betriebssystemen bitte durch ``\usepackage[applemac]{inputenc}'' ersetzen. (Urspruenglich ansinew).
+\usepackage[T1]{fontenc}
+ 
+\usepackage[english]{babel}
+% \usepackage[nospace,noadjust]{cite}
+
+\usepackage{eurosym}
+\usepackage{amssymb,amsmath}
+
+\usepackage{todonotes}
+
+\usepackage[ruled]{algorithm2e}
+
+\usepackage{graphicx}
+\usepackage{caption,subcaption}
+\usepackage{geometry}
+\usepackage{color}
+\definecolor{kit}{cmyk}{1,0,.6,0}
+
+\usepackage{hyperref}
+\hypersetup{pdftoolbar=true,
+            pdfmenubar=true,
+            pdfpagemode=UseOutlines,
+            bookmarksnumbered=true,
+            linktocpage=true,
+            colorlinks=false,
+            %backref, % Entkommentieren, um zu sehen, ob alle Literaturstellen im Text zitiert werden.
+            colorlinks=false
+            }
+
+
+\usepackage[
+backend=biber,
+style=numeric,
+sorting=nyt
+]{biblatex}
+
+\renewbibmacro{in:}{%
+  \ifentrytype{article}{}{\printtext{\bibstring{in}\intitlepunct}}}
+
+\addbibresource{references.bib}
+
+
+\newtheorem{definition}{Definition}[section]
+\newtheorem{theorem}[definition]{Theorem}
+\newtheorem{lemma}[definition]{Lemma}
+\newtheorem{corollary}[definition]{Corollary}
+\newtheorem{remark}[definition]{Remark}
+\newtheorem{example}[definition]{Example}
+
+%\newtheorem{algorithm}[definition]{Algorithm}
+
+
+\setlength{\parindent}{0pt}
+\parskip1.5ex
+
+\newcommand{\R}{\mathbb R} % Beispiel für die Definition eines eigenen Befehls
+\newcommand{\E}{\mathbb{E}}
+
+\begin{document}
+\begin{titlepage}
+
+\begin{figure}
+\begin{minipage}{0.2\textwidth}
+\includegraphics[scale=.6]{kit_logo_de_4c_positiv-rgb.pdf}
+\end{minipage}
+\hfill
+\begin{minipage}{0.6\textwidth}
+\begin{flushright}
+Institut f\"ur Operations Research \\
+Lehrstuhl f\"ur stochastische Optimierung \\
+Prof. Dr. Steffen Rebennack \\
+\medskip
+\end{flushright}
+\end{minipage}
+\bigskip
+\end{figure}
+
+\vspace*{35pt}
+
+\begin{center}
+\Large{Seminar}    
+
+\vspace*{35pt}
+
+\fboxsep 40pt
+\fboxrule 6pt
+\fcolorbox{kit}{white}{\parbox{80mm}{\begin{center}\Large{Experience replay in stochastic\\
+dual dynamic programming}
+% \Large{second title-line}
+\end{center}}
+}
+
+\vspace*{40pt}
+
+\normalsize
+
+by \\[4ex]
+
+Maximilian Volk\\
+Matr. Nr.: 2101315\\
+Industrial Engineering and Management (M.Sc.)\\[4ex]
+
+Date\\
+%19.05.2023 
+\today
+\\[4ex]
+
+Adviser:
+Dr. John Alasdair Warwicker
+
+\end{center}
+
+\end{titlepage}
+\thispagestyle{empty}\cleardoublepage
+
+\mbox{}\thispagestyle{empty}\cleardoublepage
+
+\vspace*{2eM}
+
+{\Large \textbf{Erklärung}} 
+% Bitte prüfen Sie, ob dies die für Ihren Studiengang verlangte Erklärung ist!
+
+\bigskip
+
+Ich versichere wahrheitsgemäß, die Arbeit selbstständig angefertigt und alle benutzten Hilfsmittel und Quellen vollständig angegeben zu haben, die wörtlich oder inhaltlich übernommenen Stellen als solche kenntlich gemacht zu haben und die Satzung des KIT zur Sicherung guter wissenschaftlicher Praxis beachtet zu haben.\\
+
+\vspace*{3eM}
+
+\textit{Datum} \hspace{8cm} \textit{Name}
+\thispagestyle{empty}\cleardoublepage
+
+\mbox{}\thispagestyle{empty}\cleardoublepage
+
+% \setcounter{page}{3}
+
+\begin{abstract}
+
+The similarities between stochastic dual dynamic programming (SDDP) and Q-learning, a popular and successful reinforcement learning algorithm suggest that techniques improving one of these algorithms might prove valuable for the other. Experience replay is a widely employed extension to Q-learning where old experiences are revisited later in the algorithm to improve the learning process. Recently, Avila et al.~\cite{avila2023batch} have proposed an integration of experience replay in the form of batch learning in SDDP. Our work gives an overview of the necessary fundamentals of SDDP and Q-learning and shows how this integration works. The proposed variants of SDDP are tested on a practical energy cost optimization problem arising for the increasing number of prosumers and microgrids in the energy system. We find that experience replay hinders performance of single-threaded SDDP in particular early in the run time, leading to the conclusion that might be best used at a later point in the run time to make improvements when SDDP stagnates.
+
+\end{abstract}
+\thispagestyle{empty}\cleardoublepage
+
+\mbox{}\thispagestyle{empty}\cleardoublepage
+
+\tableofcontents
+
+% \newpage
+% \ \newpage
+\thispagestyle{empty}\cleardoublepage
+
+\mbox{}\thispagestyle{empty}\cleardoublepage
+
+\setcounter{page}{1}
+\section{Introduction}
+
+% Any decision maker desires for the alternative he chooses to be the best one for him in some sense. He desires his decision to be \emph{optimal} among the set of feasible alternative, thus solving an \emph{optimization problem}.
+
+% One of the key components in decision making is dealing with uncertainty. In todays world - more than ever - decision makers in different contexts are facing uncertainties. Whether it is supply chains susceptable to disruptions, financial markets influenced by varying economic conditions, businesses facing unkown demand or energy systems relying increasingly on volatile generation.
+% The arising decisions are optimization problems \emph{under uncertainty}.
+
+% In many contexts, any single decision is influenced by preceding decisions and influences succeeding decisions - both in terms of the set of feasibles alternatives and the corresponding utility for the decision maker. For a given decision one alternative which seems optimal when analyzed in isolation might have a substantial negative impact on the decisions that follow. Therefore, decisions need to be made not in isolation but holistically in the form of one sequential decision problem. 
+% The sequence of the decisions is given by the point in time at which they need to be made. The set of points in time at which the decisions are made constitutes a set of different stages - we arrive at a \emph{multi-stage} optimization problem under uncertainty.
+
+% If one wants to specify a solution method or procedure to make such decisions and take the uncertainty into account, the uncertainty must be described and quantified in some way. \emph{Robust optimization} only requires the extent of the uncertainty to be described and then consists of an optimization assuming the worst-case realization of the uncertainty. \emph{Stochastic optimization} on the other hand is an approach that requires and takes into account the probability distribution governing the uncertainty. The latter approach is the one which will be studied in this paper leading to multi-stage \emph{stochastic} optimization problems.
+
+% For complex and large decisions, that is involving many decision variables or constraints, the tractability of computing the optimal \emph{solution} becomes relevant. While in general, in the words of R. Tyrrell Rockafellar, "the great watershed in optimization is not between linearity and nonlinearity, but convexity and nonconvexity" \cite{rockafellar1993lagrange}, in the case of multi-stage stochastic optimization problems there is a difference even between linear and convex problems that is relevant for their algorithmic treatment \cite{girardeau2015convergence}. Here we only focus on the linear case and leave the treatment of convex problems aside.
+
+% To summarize, sequential decision problems we study in this work are the multi-stage stochastic \emph{linear} optimization problems.\\
+
+% The 
+
+
+
+
+% \begin{itemize}
+%     \item relatively complete recourse explanation
+% \end{itemize}
+
+In todays world - more than ever - decision makers in different contexts are facing uncertainties. Whether it is supply chains susceptable to disruptions, financial markets influenced by varying economic conditions, businesses facing unkown demand or energy systems relying increasingly on volatile generation.
+The arising decisions are optimization problems \emph{under uncertainty}.
+
+In many contexts, any single decision is influenced by preceding decisions and influences succeeding decisions - both in terms of the set of feasibles alternatives and the corresponding utility for the decision maker. For a given decision one alternative which seems optimal when analyzed in isolation might have a substantial negative impact on the decisions that follow. Therefore, decisions need to be made not in isolation but holistically in the form of one sequential decision problem. 
+The sequence of the decisions is given by the point in time at which they need to be made. The set of points in time at which the decisions are made constitutes a set of different stages - we arrive at a \emph{multi-stage} optimization problem under uncertainty.
+
+These problems, sometimes also called sequential decision problems have been studied in different research fields and under different names, for an unifying overview we refer to \cite{powell2021reinforcement}. Two of the premier of these perspectives are referred to generally as stochastic programming and reinforcement learning.
+
+The former evolved out of linear programming, with parts of the data being uncertain. Linear programs under uncertainty were first studied by Dantzig \cite{dantzig1955linear} and Beale \cite{beale1955minimizing}. While Beale only studied the two-stage case, Dantzig also already considered multi-stage stochastic linear programs. A broad introduction to stochastic programming can be found in \cite{birge2011introduction}.
+
+While in general, in the words of R. Tyrrell Rockafellar, `the great watershed in optimization is not between linearity and nonlinearity, but convexity and nonconvexity` \cite{rockafellar1993lagrange}, in the case of multi-stage stochastic optimization problems there is a difference even between linear and convex problems that is relevant for their algorithmic treatment \cite{girardeau2015convergence}. Here we only focus on the linear case and leave the treatment of convex problems aside.
+
+A standard method to solve multi-stage stochastic linear programs is stochastic dual dynamic programming (SDDP). SDDP was first introduced by Pereira and Pinto \cite{pereira1991multi} for multi-stage stochastic linear programs and under the condition that the probability distributions are finite and stage-wise independent. They show its application in minimizing the operating costs of a system of hydroelectric plants in Brazil.
+
+Under the assumptions that the uncertainty only occurs on the right hand side of the constraints, that the probability distributions are finite and stage-wise independent, Philpott and Guan \cite{philpott2008convergence} gave a convergence proof for SDDP requiring that each scenario is infinitely often sampled during the forward and backward passes. The earliest convergence proof for SDDP by Linowsky and Philpott \cite{linowsky2005convergence} requires a stricter assumption on the sampling of scenarios.
+While also requiring the stage-wise independence assumption, Shapiro \cite{shapiro2011analysis} shows that SDDP converges even if uncertainty is also present in the recourse and technology matrices as well as the objective function. By studying the sample average approximation version of the problem, Shapiro additionally relaxes the finiteness assumption of the probability distributions.
+
+The stage-wise independence of the uncertainty is a quite strict and not realistic assumption in many applications. However, it allows for sharing cuts among the nodes of a stage in the scenario tree and is thus crucial for the convergence of SDDP and similar algorithms. Infanger and Morton \cite{infanger1996cut} give examples for interstage dependence structures such as auto-regressive processes which can be transformed to stage-wise independence using additional state variables. This approach is limited to stage-wise dependence on the right-hand side of the constraints. An approach dealing with stage-wise dependence of the objective function coefficients is given in \cite{downward2020stochastic}.
+
+A recent review of stochastic dual dynamic programming is given in \cite{fuellner2021stochastic}.
+
+Another modelling framework for sequential decision problems are Markov decision processes. These serve as the theoretical foundation of the wide and hot research topic of reinforcement learning for which \cite{sutton2018reinforcement} provides an introduction. Here, Q-learning, first proposed by Watkins~\cite{watkins1989learning} is an important algorithmic approach. A convergence proof was first given in~\cite{watkins1992q}. Q-learning has been successful, combined with deep neural networks it showed impressive capabilities in learning to play games~\cite{mnih2013playing}. Q-learning is often, e.g. in \cite{fedus2020revisiting}, \cite{mnih2013playing} and references therein, accompanied by a technique called \emph{experience learning} in which past experiences are again revisited to improve learning. Experience replay was first introduced by Lin~\cite{lin1992self} and a recent overview over its foundation and application is found in \cite{fedus2020revisiting}.
+
+The similar fundamental structure of decision making under uncertainty across multiple stages suggests for the two research fields to collaborate and to adapt ideas from one another. One such case is the recent work of Avila et al. \cite{avila2023batch}, in which experience replay is incorporated into stochastic dual dynamic programming to improve its performance, in particular using parallel computing.
+
+In this work, we aim to present to the reader how this incorporation works theoretically and to examine using an own implementation of SDDP how experience replay can benefit the performance. With its heavy dependence on external and uncertain meteorological and economic influences, decision making in the energy sector is particularly suited for the application of stochastic programming. Both the introductory work on SDDP \cite{pereira1991multi} and as the introduction of experience replay into SDDP~\cite{avila2023batch} as well as many others which can be found in the references of \cite{fuellner2021stochastic} can serve as evidence. Motivated by the rising number of energy prosumer households with the progressing transition to clean energy world-wide, we choose the decision making of prosumer households bundled in a microgrid as an application case. A very similar case was already used recently in \cite{pacaud2022optimization} to understand the performance of the standard SDDP algorithm.
+
+The structure of the paper is as follows. 
+First, we review the theoretical background and key concepts from the two main perspectives: multi-stage stochastic programming with the solution method stochastic dual dynamic programming and Markov decision processes with the solution method of reinforcement learning, in particular Q-learning.
+Next, the incorporation of ideas from Q-learning such as batch learning with experience replay into SDDP is explained.
+As an applied part, a case study based on the energy application serves to compare the approaches in an implementation regarding their performance.
+We conclude with a discussion of the results and further research questions.
+
+
+\section{Theoretical background}
+
+\subsection{Multi-stage stochastic linear programs}
+Multi-stage stochastic linear programs (MSLP) are the type of optimization problems which the methods studied in this work can solve.
+
+\subsubsection{Uncertainty}
+The multiple, but finitely many, stages are ordered by time, i.e. the stages are indexed by $t \in [T]$ where we define $[T] := \{1,...,T\}$ for any $T\in\mathbb{N}$.
+As the general frame of the uncertainty we consider a probability space $(\Omega, \mathcal{F}, \mathbb{P})$ with the filtration $\mathcal{F}_1 \subseteq ... \subseteq \mathcal{F}_T$.
+The uncertainty of each stage $t \in [T]$ is modelled using a stochastic process $(\xi_t)_{t\in [T]}$ which we assume to be adapted to the filtration $(\mathcal{F}_t)_{t\in [T]}$. This means, $\xi_t$ is $\mathcal{F}_t$-measurable and thus non-anticipative. By $\Xi_t$ we denote the support of $\xi_t$ for $t\in [T]$.
+
+In this work we assume the probability space to be finite. If this is not the case, using quantization and other discretization techniques such as sample average approximation \cite{shapiro2011analysis}, the continuous case can be also dealt with the finite setting. For the first stage, we assume no uncertainty, i.e. $|\Xi_1| = 1$.
+
+The principal assumption of stochastic programming in general is that the distribution of $(\xi_t)_{t\in [T]}$ is known, i.e. for any of the in our case finitely many possible realizations or \emph{scenarios} the probability is known with certainty in advance.
+
+The principal assumption for the application of stochastic dual dynamic programming in particular is the stage-wise independence of $(\xi_t)_{t\in [T]}$, that is $\xi_t$ is independent of $\xi_{[t-1]} := (\xi_t)_{t\in [t-1]}$. How one can still reformulate some forms of dependence between stages to the stage-wise independent case will be discussed below.
+
+Finally, we require the data process $(\xi_t)_{t\in [T]}$ to be independent of the process of the decisions, $(x_t)_{t\in [T]}$.
+
+Under these assumptions of finiteness and independence from previous stages and decisions, at each stage $t\in [T]$, $\xi_t$ can be described by its finitely many realizations $\xi_{tj}$ with associated probabilities $p_{tj}$, $j\in [q_t]$ where $q_t\in \mathbb{N}$ is the number of realizations in stage $t$.
+
+\subsubsection{Problem formulation}
+
+We consider MSLPs of the form
+\begin{align*}
+    \min_{(x_t)_{t\in [T]}} \ & \E\left[ \sum_{t=1}^T c_t^\top x_t \right] \\
+    \text{s.t. } & W_t x_t = h_t - T_{t-1} x_{t-1} \ \forall t \in [T] \\
+    & x_t \geq 0 \ \forall t \in [T]
+\end{align*}
+
+where the data is given by the stochastic process $(\xi_t)_{t\in [T]} = (c_t, W_t, h_t, T_{t-1})_{t\in [T]}$ and analogously we denote for $t\in [T]$ the realizations $\xi_{tj} = (c_{tj}, W_{tj}, h_{tj}, T_{(t-1)j})$ for $j\in q_t$ where $c_{tj} \in \R^{n_t}$, $W_{tj} \in \R^{m_t \times n_t}$, $h_{tj} \in \R^{m_t}$ and $T_{(t-1)j} \in \R^{m_t \times n_{t-1}}$ with $n_t, m_t \in \mathbb{N}$.
+
+The constraints are linear and couple two successive stages using the recourse matrix $W_t$ and technology matrix $T_{t-1}$.
+
+A feasible solution to this problem is a \emph{non-anticipative policy}, that is a decision process $(x_t)_{t\in [T]}$ with values in $\R^{n_t}$ which we assume be adapted to $(\mathcal{F}_t)_{t\in [T]}$ as well, that is, the dependence of $x_t$ on the data process is restricted to the stages up to $t$.
+
+We assume throughout the stages $t\in [T]$ \emph{relatively complete recourse} \cite{birge2011introduction} to hold, i.e. that for each feasible $x_{t-1}$ and every realization of the data process there is a feasible $x_t$. Moreover, we assume the feasible set to be bounded, for example by box-constraints, which guarantees the existence of an optimal solution.
+
+In the above MSLP the objective to be minimized is the expectation of the cumulative cost of the decisions taken over time. As other distributional properties of the (random) cumulative cost such as any form of \emph{risk} are not considered to determine the value of a solution, this case is called risk-neutral. We focus in this work exclusively on the risk-neutral case for simplicity. However, as risk aversity is a core property of human decision makers and thus relevant in many applications, extensions for the risk-averse case have been proposed and an overview can be found in \cite{shapiro2021tutorial} and the references therein.
+
+\subsubsection{Dynamic programming decomposition}
+Due to the assumption of stage-wise independence, the objective can be reformulated using the law of total expectation as
+\begin{equation}
+    \min_{x_1 \in X_1} c_1^\top x_1 + \E \left[ \min_{x_2 \in X_2(x_1, \xi_2)} c_2^\top x_2 + \E\left[ ... + \E\left[ \min_{x_T \in X_T(x_{T-1}, \xi_T)} c_T^\top x_T \right]\right] \right]
+    \label{problem: stages}
+\end{equation}
+with the feasible sets \[X_t(x_{t-1}, \xi_t) := \{x_t \in \R^{n_t} \mid W_t x_t = h_t - T_{t-1} x_{t-1}, x_i \geq 0\}, \ t\in [T].\]
+
+Using the dynamic programming equations
+\begin{equation}
+    V_t(x_{t-1}, \xi_t) = \min_{x_t \in  X_t(x_{t-1}, \xi_t)} c_t^\top x_t + \mathcal{V}_{t+1}(x_t),\ t \in \{2, ..., T\}
+    \label{problem: dpe}
+\end{equation}
+where $V_{T+1} = 0$ and defining $\mathcal{V}_{t+1}(x_t) = \E[V_{t+1}(x_t, \xi_{t+1})]$
+
+the objective value of problem \eqref{problem: stages} and 
+\begin{equation}
+    v^* = \min_{x_1 \in X_1} c_1^\top x_1 + \mathcal{V}_{2}(x_1)
+    \label{problem: first stage}
+\end{equation}
+
+coincide.
+
+As a first observation, note that due to the stagewise independence assumption, $\mathcal{V}_t$ is independent of $\xi_{[t-1]}$.
+
+Problems \ref{problem: first stage} can be written down compactly but a suitable solution procedure is not immediately clear. While the term of the cost of stage 1 is linear and the set $X_1$ is given by linear constraints and thus polyhedral, $\mathcal{V}_2$ is available.
+One can hope to obtain $\mathcal{V}_t$, $t\in \{2,...,T\}$ recursively, i.e. by going \emph{backward in time} using the relations \eqref{problem: dpe}.
+Still, the properties of $\mathcal{V}_{t}$ and $V_t$ and thus a concrete solution approach remain not obvious.
+
+However, due to the linear structure of the problems \eqref{problem: dpe}, one can show that $V_t$ and $\mathcal{V}_t$ are polyhedral convex functions \cite{shapiro2009lectures} in $x_{t-1}$.
+A function is called polyhedral convex, if its epigraph is a polyhedron \cite{rockafellar1997convex}. This means that $\mathcal{V}_t$ can be represented using finitely many hyperplanes, i.e. as the maximum of finitely many affine functions. This insight is the basis for algorithms such as SDDP which generate these hyperplanes over time.
+
+
+\subsection{Stochastic dual dynamic programming}
+In SDDP the idea is to generate the finitely many hyperplanes which describe $\mathcal{V}_t$. Under the assumption of stage-wise independence and an assumption on sampling, these finitely many hyperplanes are found in a finite number of iterations almost surely \cite{shapiro2011analysis}.
+
+Throughout the algorithm, for each $t\in [T]$, those hyperplanes representing $\mathcal{V}_t$ which have already been found are collected in the function 
+$\mathfrak{V}_t$ and the problems \eqref{problem: dpe} where $\mathcal{V}_{t+1}$ is replaced by $\mathfrak{V}_{t+1}$ are solved recursively. 
+These problems are of the form
+\begin{equation}
+    %V_t(x_{t-1}, \xi_t)=
+    \min_{x_t \in  X_t(x_{t-1}, \xi_t)} c_t^\top x_t + \phi \text{ s.t. } \phi \mathbf{1} \geq G_{t+1}x_t + g_{t+1},\ t \in \{1, ..., T\}
+    \label{problem: backward}
+\end{equation}
+
+where the normal vectors of the hyperplanes of $\mathfrak{V}_{t+1}(x_t)$ are collected in the matrix $G_{t+1}$ and the corresponding intercepts in the vector $g_{t+1}$ and $\mathbf{1}$ is the vector of ones of suiting dimension. 
+The computation of these hyperplanes is not discussed here, the reader is referred to the detailed description in \cite{fuellner2021stochastic}.
+
+Of course for $t\geq 2$, $X_t$ and $c_t$ depend on $\xi_t$. Algorithmically this is solved by sampling, i.e. scenarios or realizations from $\xi_t$ are drawn and for these realizations the problems \eqref{problem: backward} are solved.
+Given a realization of the uncertainty, problems \eqref{problem: backward} are linear programs and can thus be easily solved.
+
+Importantly however, our above observation, that under the stage-wise independence $\mathcal{V}_t$ is independent of $\xi_{[t-1]}$, implies that the hyperplanes generated and collected in $\mathfrak{V}_t$ are valid for all realizations of the uncertainty. As such hyperplanes are often called \emph{cuts}, this property which SDDP exploits is called \emph{cut sharing} in the literature. However, as argued in \cite{fuellner2021stochastic} it is really the nodes in the scenario tree and the expected value function $\mathcal{V}_t$ that is shared among the scenarios. The equality of the cuts is then only a consequence of this \emph{node sharing} among scenarios in a recombining scenario tree which results from stage-wise independence.
+
+Both $\mathfrak{V}_t$ and $\mathcal{V}_t$ are the maxima of a set of affine functions or hyperplanes and since the set of affine functions corresponding to $\mathfrak{V}_t$ is a subset of that corresponding to $\mathcal{V}_t$, $\mathfrak{V}_t$ is always a lower bound for $\mathcal{V}_t$. In particular, defining
+$\underline{v} = \min_{x_1 \in X_1} c_1^\top x_1 + \mathfrak{V}_{2}(x_1)$, a lower bound on the objective value $v^*$ is given by $\underline{v}$.
+
+Algorithm~\ref{alg: sddp} shows the base SDDP algorithm and is adapted from \cite{fuellner2021stochastic}.
+
+As its name suggests, during the forward pass, we step forward through time and for each sampled scenario obtain trial points which are optimal based on the current approximations $\mathfrak{V}_t$. \\
+In the backward pass, we step backward through time and generate cuts at the trial points. For this the corresponding optimal dual vectors of all $q_t$ possible uncertainty realizations have to be calculated.
+
+The trial points obtained during the forward pass yield an objective value for MSLP as least as large as that of an optimal policy, so that the mean cost \begin{equation}
+\Bar{v}^i = \frac{1}{K}\sum_{t=1}^T c_{tj(t,k)}^\top x^i_{t-1,k}    
+\end{equation}
+of the trial points is an unbiased estimator of the current upper bound. Here $j(t,k) \in q_t$ denotes the uncertainty realization at time $t$ in scenario $k$.
+
+
+\begin{algorithm}
+\caption{SDDP}\label{alg: sddp}
+\KwData{MSLP, Initial bounds $\underline{\theta}_t, t \in \{2,...,T+1\}, \underline{\theta}_{T+1} = 0$, stopping condition}
+\KwResult{Estimates of $\mathcal{V}_t$, $v^*$}
+Set $i \gets 1$ \\
+Initialize $G_t = 0$, $g_t = \underline{\theta}_t, t\in \{2,...,T+1\}$
+
+\While{Stopping condition not fulfilled}{
+    Sample scenarios $K$ \\
+    Forward pass: \\
+    Solve \eqref{problem: backward} for $t=1$ and obtain trial point $x^i_{1}$ (consider $x^i_{0} = 0$) \\
+    \For{$t = 2,...,T$}{
+        \For{$k \in K$}{
+            Solve \eqref{problem: backward} for scenario $k$, considering $x^i_{t-1,k}$ and obtain trial point $x^i_{t,k}$ \\
+        }
+    }
+    Calculate $\Bar{v}^i = \frac{1}{K}\sum_{t=1}^T c_{tj(t,k)}^\top x^i_{t-1,k}$
+    
+    Backward pass: \\
+    \For{$t = T,...,2$}{
+        \For{$k \in K$}{
+            \For{$j \in [q_t]$}{
+                Solve \eqref{problem: backward} for uncertainty realisation $j$, considering $x^i_{t-1,k}$ and obtain dual vector $\pi^i_{jk}$ \\
+            }
+            Compute cut from obtained duals $\pi^i_{jk}, j\in [q_t]$ \\
+            Add cut normal vector, intercept to $G_t, g_t$ \\
+        } 
+    }
+    Solve \eqref{problem: backward} for $t = 1$ (as above) to obtain $\underline{v}^i$ \\
+    $i \gets i + 1$ \\
+}
+
+\end{algorithm}
+
+
+
+\subsection{Markov decision processes}
+To understand the extension to SDDP based on batch learning proposed in \cite{avila2023batch}, we introduce the field from which this technique emerged.
+Reinforcement learning is a wide field which also deals with problems of sequential decision making.
+The theoretical foundation of reinforcement learning are Markov decision processes.
+
+% We now see the connection between multi-stage stochastic programs and MDPs. To do so we will follow the approach of  \cite{sutton2018reinforcement} to "formalize reinforcement learning as the optimal control of incompletely-known Markov decision processes."
+
+A Markov decision process with a finite horizon $T\in \mathbb{N}$ is described by states, actions, rewards and a transition function. The spaces of states are denoted $S_t, t\in [T]$ while the spaces of feasible actions for each given state are $A_t(s), s \in S_t$. The space of all actions at a $t$ is denoted by slight abuse of notation $A_t := \bigcup_{s\in S_t} A_t(s)$.
+The reward function $r_t: A_t \times S_t \to \R$ models the immediate reward $r_t(a, s)$ received by taking action $a \in A_t(s)$ in state $s\in S_t$ at time $t$.
+
+Finally, a transition probability density $p_t(s | a, u)$ for getting to state $s$ in step $t$ having chosen action $a$ from state $u$ in $t-1$ for each $t\in [T]$ specifies the dynamic across time.
+
+The decision maker now desires a policy $\pi$ consisting of decision rules $\pi_t: S_t \to A_t$ which maximize the expected obtained reward across time, i.e. 
+\begin{equation}
+    \max_\pi \E \left[ \sum_{t=1}^T r_t(a_t, s_t) \right] \text{ s.t. } s_t \in S_t, a_t \in A_t(s_t), a_t = \pi_t(s_t)
+    \label{problem: MDP}
+\end{equation}
+
+In the reinforcement learning and MDP literature, e.g. \cite{powell2021reinforcement}, \cite{sutton2018reinforcement}, often, the state and action spaces are discrete and sometimes even constant across time. The general setting allowing for continuous state and action spaces and transition probability measures can be found in \cite{bauerle2011markov}.
+
+Similar to the multi-stage stochastic linear programs, also Markov decision processes can be decomposed in a dynamic programming fashion.
+
+For this, the value function is the traditional theoretic approach. For a given policy $\pi$ the value function can be defined as follows \cite{sutton2018reinforcement} 
+\begin{equation}
+    V^\pi_t(s) =  r_t(\pi_t(s), s) + \E \left[ \sum_{\tau = t+1}^T r_t( a^\pi_t, s^\pi_t) \middle| s_t = s \right] 
+\end{equation}
+
+and in recursive form
+\begin{equation}
+    V^\pi_t(s) = r_t(\pi_t(s), s) + \E \left[ V^\pi_{t+1}(s_{t+1}) \middle| s_t = s \right]
+\end{equation}
+
+Thanks to the Bellman optimality principle of dynamic programming \cite{sutton2018reinforcement}, the value of an optimal policy $\pi^*$ at time $t$ in state $s$ is 
+\begin{equation}
+    V^*_t(s) = \max_\pi V^\pi_t(s) = \max_{a\in A_t(s)} r_t(a, s) + \E \left[ V^*_{t+1}(s_{t+1}) \middle| s_t = s, a_t = a \right]
+    \label{equation: value Bellman}
+\end{equation}
+and in particular in the latter term the dependence on the policy has disappeared.
+
+The optimality equation $\eqref{equation: value Bellman}$ serves as the basis for many algorithmic solution approaches. If the state transition density or probability $p$ and thus the Markov decision process is fully known, classical methods which use dynamic programming ideas such as policy iteration or value iteration can be used. In many cases however, the Markov decision process and in particular the transition density is not fully known in advance. A popular solution approach for these cases is reinforcement learning.
+
+
+\subsection{Reinforcement learning}
+In reinforcement learning, since the Markov decision process transition probabilities are not known in advance, an \emph{agent} traverses the states, which are in the literature collectively called \emph{environment}, in order to \emph{learn} how to maximize the reward \cite{sutton2018reinforcement}.
+
+Given the structure of an MDP, a natural approach is to build or estimate a model of these transition probabilities by experiencing or interacting with the environment. Such approaches are called \emph{model-based}, since estimates of the value functions and the chosen policies rely on the learnt probability model. In principle, for each combination of current state and chosen action the probability of each next state needs to be estimated. The induced computational cost for this model is substantial and in some applications prohibitive \cite{asadi2016strengths}.
+
+To avoid this, so called \emph{model-free} approaches learn the value function for each action given a current state directly. Given similar computing resources, model-free approaches perform better compared to their model-based counterparts. However, it also requires more data in the form of interactions with the environment. If these interactions are costly, model-based approaches might still be advantageous. 
+The trade-off between computational and data efficiency and a comparison between model-based and model-free reinforcement learning as well synthesis approaches are explored in \cite{asadi2016strengths} and \cite{sutton2018reinforcement}.
+
+The large state spaces found in recent application areas of reinforcement learning such as games \cite{mnih2013playing} favor the model-free approaches. A widely used model-free reinforcement learning technique is \emph{Q-learning} and its variants, which will be discussed below.
+
+
+\subsubsection{Q-learning}
+
+First introduced by Watkins in his PhD thesis \cite{watkins1989learning}, Q-Learning is one of the oldest algorithms used in reinforcement learning. It is named after the Q-factors or Q-values, an alternative to the classic value functions $V$ which are defined as
+\begin{equation}
+    Q^\pi_t(a, s) = r_t(a, s) + \E \left[ \sum_{\tau = t+1}^T r_t( a^\pi_t, s^\pi_t) \middle| a_t = a, s_t = s \right] 
+    \label{equation: Q-values 1}
+\end{equation}
+
+For an optimal policy we have analogously to \eqref{equation: value Bellman}
+\begin{equation}
+    Q^*_t(a, s) = \max_\pi Q^\pi_t(a, s)
+\end{equation}
+
+and due to the Bellman optimality principle, an optimal policy chooses the optimal action in each state so that the relation
+\begin{equation}
+    V^*_t(s) = \max_{a\in A_t(s)} Q^*_t(a, s)
+    \label{equation: relation from Q to V}
+\end{equation}
+
+holds. This allows us to write also the Q-factors in recursive form
+\begin{equation}
+    Q^*_t(a, s) = r_t(a, s) + \E \left[ \max_{a_{t+1}\in A_t(s)} Q^*_{t+1}(a_{t+1}, s_{t+1}) \middle| a_t = a, s_t = s \right] 
+    \label{equation: Q-values Bellman}
+\end{equation}
+
+The idea of the Q-learning algorithm is to learn the optimal Q-factors $Q^*_t(a, s)$ directly. 
+A standard variant of Q-learning is shown in algorithm~\ref{alg: q-learning} which is adapted from \cite{powell2021reinforcement}.
+
+% \begin{quote}
+%     The key idea is that we can choose an action using (18.15) without needing to directly approximate the future in any way. After choosing an action an (or ant ), we can then simply observe the next state we transition to, without an explicit model of how we got there. \cite{powell2021reinforcement}
+% \end{quote}
+
+
+
+\begin{algorithm}
+\caption{Q-Learning}\label{alg: q-learning}
+\KwData{Initialization of Q-factors $Q^0_t(a,s)$ for each $a\in A_t(s), s\in S_t, t\in [T]$, number of iterations $N$}
+\KwResult{Estimate of Q-factors  $Q^N_t(a,s)$}
+Set $n \gets 1$ \\
+Initialize $s^1_1$
+\While{$n \leq N$}{
+    \For{$t = 1,...,T$}{
+        Choose optimal action $a^n_t \gets \arg \max_{a\in A_t(s^n_t)} Q^{n-1}_t(a, s^n_t)$ \\
+
+        Sample next state $s^n_{t+1}$ given $s^n_t$, $a^n_t$ (from $p$) \\
+        
+        Calculate $q^n_t \gets r_t(a_t, s_t) + \max_{a\in A_{t+1}(s^n_{t+1})}Q^{n-1}_{t+1}(a, s^n_{t+1})$ \\
+
+        Update $Q^{n}_t(a^n_t, s^n_t) \gets (1-\alpha_{n}) Q^{n-1}_{t}(a^n_t, s^n_{t}) + \alpha_n q^n_t$ \\
+        
+    }
+    
+}
+\end{algorithm}
+
+The following theorem, proven in \cite{watkins1992q}, gives a condition for convergence of Q-learning
+\begin{theorem}
+    For bounded rewards $r$ and learning rates $0 \leq \alpha_n < 1$ satisfying
+    \begin{equation*}
+        \sum_{n=1}^\infty \alpha_n = \infty \text{ and } \sum_{n=1}^\infty \alpha^2_n = 0
+    \end{equation*}
+    algorithm \ref{alg: q-learning} converges as $N\to\infty$, i.e.  $Q^n_t(a, s) \to Q_t(a, s)$ for each $a\in A_t(s), s\in S_t, t\in [T]$ with probability 1.
+\end{theorem}
+
+
+\subsubsection{Experience replay}
+
+As we see in algorithm~\ref{alg: q-learning}, in Q-learning any new information on the unobserved properties of the MDP which is obtained by taking an action into the next state and the receiving the corresponding reward, is immediately incorporated into the model of the Q-factors through their updating. However, the transitions from one state to the next based on the selected action themselves are forgotten in the sense that they are not retained for later use.
+
+Introduced by Lin \cite{lin1992self}, experience replay is a technique where past actions and state transitions - the experiences - are collected in a memory and then later revisited. 
+This has the advantage that important but rare experiences are not lost and can later be revisited through sampling from the replay memory. 
+
+Regarding the sampling procedure of past experiences, one has to decide on the number of past experiences to sample relative to the number of new experiences collected. This ratio is called \emph{replay ratio} \cite{fedus2020revisiting}. Secondly, regarding the probability assigned to each past experiance for the sampling has to be determined. A common choice is uniform sampling \cite{fedus2020revisiting}, however other non-uniform alternatives such as prioritized sampling \cite{schaul2015prioritized} have been proposed.
+Prioritized sampling aims at exploiting the advantage of replaying rare experiences further by assigning higher sampling probabilities based on a measure of importance of the respective past experience. Thus, the likelihood of sampling rare but important experiences is increased.
+
+In many of the most successful applications of reinforcement learning e.g. \cite{mnih2013playing}, deep neural networks are used to approximate $Q$. The updates to the approximation of $Q$ therefore are weight updates of these networks. This is often done in a batch-wise fashion using stochastic gradient descent methods. The convergence of these methods relies on the assumption of independence between successive updates \cite{fedus2020revisiting}. However, in standard Q-learning, successive updates are heavily dependent on one another since the updates are related through the sequence of states and actions. By sampling past experiences randomly in between new, correlated, experiences, experience replay allows to fulfill the independence assumption required for the successful training of the underlying deep neural networks.
+
+A common approach in the reinforcement learning literature is to have a replay memory of fixed-size which works on a first-in-first-out (FIFO) basis \cite{fedus2020revisiting}. However, the experience replay adaption of \cite{avila2023batch} uses a replay memory of unlimited size.
+
+% \todo{Continue here with experience replay algorithm}
+
+% \subsubsection{Other improvements}
+
+\section{Combining RL techniques with SDDP}
+
+After having introduced the theoretical foundations from both the stochastic programming and Markov decision process perspective, we will now illuminate how an incorporation of ideas form the latter in the former works in the spirit of \cite{avila2023batch}.
+
+\subsection{MSLPs as MDPs}
+First we will see how we can view the processes and decisions of the presented multi-stage stochastic linear program as elements of a Markov decision process.
+
+We will start with the states of the MDP to be constructed. In the MSLP all information required to make a decision in $t$ is encapsulated in the decision variables of the prior stage $t-1$, $x_{t-1}$, and the uncertainty realization of stage $t$, $\xi_t$. 
+We can thus define the state as $s_t = (x_{t-1}, \xi_t)$. For such a state $\Bar{s} = (\Bar{x}, \Bar{\xi})$ we can define the set of feasible actions in $t$ as $A_t(\Bar{s}) = X_t(\Bar{x}, \Bar{\xi})$ and thus the set of states recursively as
+\[S_t = \{(\Bar{x},\Bar{\xi}) \mid \Bar{\xi} \in \Xi_t, \exists s \in S_{t-1} : \Bar{x}\in A_t(s) \}, t \in [T]\] with $S_0 = \{(x_0, \xi_1\}$ where $x_0 = 0$ and $\xi_1$ is the only uncertainty realization in stage $t=1$.
+Finally, the process of the decision variables $(x_t)_{t\in [T]}$ constitutes the policy $\pi$ we want to optimize for the Markov decision process.
+
+The reward is simply $r_t(a, \Bar{s} = (\Bar{x},\Bar{\xi})) = -c_t(\Bar{\xi})^\top a$ since we want to maximize the obtained rewards in an MDP while we minimize cost in the MSLP. Using this definition we obtain an equivalent objective.
+
+For a previous state $u = (\tilde{x}, \tilde{\xi})$ and a chosen action $a$, the density for the next state $s = (\Bar{x}, \Bar{\xi})$ in stage $t$ is $p_t(s | a, u) = p_t(\Bar{\xi})$ if $\Bar{x} = a$, otherwise it is $0$. Note that this already assumes the stage-wise independence of the process $(\xi_t)_{t\in T}$. This implies of course that the probability distribution of the next state is Markovian and we indeed have constructed an equivalent Markov decision process.
+
+\subsection{Comparing SDDP and Q-learning}
+
+After having seen how we can represent an MSLP as a MDP, we will now discuss the similarities of SDDP and Q-learning.
+
+Comparing the dynamic programming decompositions of both MSLP and MDPs we can see that using the state definition above, the value functions is the same concept in both domains. Combining equation~\eqref{equation: relation from Q to V} and equation~\eqref{equation: Q-values Bellman} 
+we can see
+\begin{equation}
+    Q^*_t(a, s) = r_t(a, s) + \E \left[ V^*_{t+1}(s_{t+1}) \middle| a_t = a, s_t = s \right] 
+\end{equation}
+and relying on the equivalence of the value functions in both the MSLP and MDP setting as well as the reward and state $s = (\Bar{x},\Bar{\xi})$ definitions we get
+\begin{equation}
+    Q^*_t(a, s) = c_t(\Bar{\xi})^\top \Bar{x} + \E \left[ \mathcal{V}_{t+1}(\Bar{x}) \right] 
+    \label{equation: SDDP q-learning}
+\end{equation}
+
+Thus, as generating $\mathcal{V}_{t+1}$ over time can be interpreted as a learning process and $Q_t$ is the sum of $\mathcal{V}_{t+1}$ and the known reward by equation~\eqref{equation: SDDP q-learning}, SDDP can be at the fundamental level seen as a Q-learning algorithm.
+
+However, comparing the algorithmic descriptions of SDDP (algorithm~\ref{alg: sddp}) and Q-learning (algorithm~\ref{alg: q-learning}), we see that while the initialisations of the Q-factors in Q-learning are equivalent to the lower bounds $\theta_t$ in SDDP, some differences in the procedures arise.
+
+In Q-learning, a chosen action is immediately used to update the Q-factors before the next state transition happens and the next action is selected. In SDDP there are separate forward and backward passes and first the actions for all stages are chosen (until $T$) and then all of the chosen actions and are used in the backward pass to update the value function approximations.
+The computed approximations however are equivalent, as the updated value functions or Q-factors are only relevant for preceding stages and for the actions chosen in later stages it does not make a difference whether whether previous stages are updated immediately or later in a separate backward pass.
+
+Secondly, in Q-learning we sample one scenario only per iteration and this scenario consists of the realized transitions from one state to the next based on the action $a^n_t$ selected. In SDDP on the other hand, multiple scenarios are sampled in each iteration and used to generate multiple trial point trajectories at a time.
+
+Thirdly the update of the approximate value function and therefore implicitly Q-factors in SDDP relies on valid lower bounds in the form of hyperplanes which are generated and thus the new approximation is the pointwise maximum of the old and the generated affine function. This is different to the classical Q-learning, in which the updated approximation is a convex combination of the existing approximation and the new value calculated.
+
+
+\subsection{Integration of experience replay in SDDP}
+While as discussed above there are some differences between SDDP and Q-learning, experience replay can be adapted in the former as introduced in \cite{avila2023batch}.   How this works will be shown now.
+
+Due to the stage-wise independence assumptions, the expected value functions $\mathcal{V}$ are shared across nodes and therefore across uncertainty realizations. Thus, for the memorizing the state of an experience, the action $x_t$ is sufficient and instead of quadruples $(s_t, a_t, r_t, s_{t+1})$ we only keep the actions $x_t$ in the replay memory.
+
+In the scheme proposed in \cite{avila2023batch}, first a number of regular SDDP iterations are performed and the obtained actions saved in the replay memory, which has an unlimited capacity. Then, a batch of these experiences is sampled and in backward passes, cuts are computed for the batch of actions. These two phases are repeated until a certain stopping criterion is fulfilled.
+Correspondingly, the resulting algorithm is called Batch Learning SDDP (BL-SDDP).
+
+Regarding the sampling of the experiences to be replayed, the authors compare a full batch strategy (where all experiences in the memory are replayed), random batch strategy (where a random sample from the memory is replayed) and batch strategies where either the best or worst actions are replayed. Here, an experience is considered good if the distance from the cut it generated to the value function is small. On their problem, the best and full batch strategies perform best.
+
+
+
+
+
+% \subsection{Other techniques}
+
+
+\section{Application - Energy cost minimization}
+In a case study on an applied problem which can be modelled as an MSLP we want to examine the performance of SDDP and the suggested extension utilizing experience replay.
+The problem under consideration is to minimize the cost of electricity in a residential microgrid, in our case consisting of two coupled households, each with a battery storage of a certain capacity and a solar panel of a certain peak power. Each household has an uncertain demand.
+A similar microgrid consisting only of one household is optimized with model predictive control and stochastic dual dynamic programming in \cite{pacaud2022optimization}. Their microgrid features in addition a hot water tank which we will ignore.
+
+\subsection{Model}
+The resolution of the planning is hourly with a horizon of three days, so we have $T = 72$ periods.
+
+In each hour, i.e. stage $t \in [T]$, the microgrid can either receive $s^+_t \in [0 , s^{+, max}]$ from the grid or feed back $s^-_t \in [0, s^{-, max}]$ electrical energy.
+The overall cost or negative profit is 
+\[ \sum_{t=1}^T p^+_t s^+_t  - p^+_t s^-_t\] 
+and shall be minimized. The prices $p^+_t > p^-_t$ vary over time, but with constant spread, and can have three equally likely realizations, a base price and prices 30\% lower and higher. The prices are independent between stages.
+
+Each of the households has a demand $d^1_t, d^2_t$ whose sum varies in three levels, and as with the prices we assume the top and bottom realization to be each 30\% from the base realization. As the base realization serves the a standard load profile (SLP) for the month may obtained from the German federal association of the energy and water industry (Bundesverband der Energie- und Wasserwirtschaft) \cite{bdew2017slp} and standardised to a 6000 kWh yearly demand. The demands are are assumed to be stage-wise independent.
+
+Each of the households has a solar panel with some capacity from which the electrical energy $g_t$ is generated in stage $t$. 
+Based on data from the Joint Research Center of the European Commission on the generation in May in the Karlsruhe area \cite{gonzalez2017solar}, the stage-wise independence of the solar generation had to be clearly rejected. However, an AR(1) model captures the inter-stage dependence sufficiently well, reaching an mean absolute error of around 5.5\%. The optimal coefficient estimate was $\theta^g = 0.65$ and the variance of the error term $\sigma^2 = 0.07$.
+The AR(1) process can be rewritten as
+\[g_t = g^b_t - \theta^g g^b_{t-1} + \varepsilon^g_t - (-\theta^g)g_{t-1}  \]
+where $g^b_t$ is the estimated mean or base generation for the hour $t$ and $\varepsilon^g_t$ the error term. Modelling $g_{t-1}$ as an additional state variable, the resulting uncertainty is only in $\varepsilon^g_t$ whose stage-wise independence can be argued for based on the time-series analysis.
+The error is quantized into 9 equally probable realizations based on a normal distribution with the estimated variance.
+
+Since the two households are connected, all of the above components can be tied together in one energy balance constraint
+\[SoC^1_t + SoC^2_t = \eta^1 SoC^1_{t-1} + \eta^2 SoC^2_{t-1} + s^+_t - s^-_t + g^1_t + g^2_t - d^1_t - d^2_t  \]
+where $\eta^1, \eta^2$ model the combined charge and discharge efficiency of the storages.
+
+Since the uncertainty in prices (3 realizations), demand (3 realizations) and generation (9 realizations) are independent there are $q_t = 81$ realizations for stages $t \in \{2,...,T\}$ with the standard assumption $q_1 = 1$.
+These uncertainties are present in $T-1 = 71$ stages, leading to a total number of around $2.58 \times 10^{137}$ scenarios.
+
+\subsection{Implementation}
+Both SDDP and BL-SDDP are implemented in Python. Gurobi 10 is used as a solver for the linear subproblems. All code is executed on a M2 MacBook. Since the parallelization of the algorithms was not investigated, a single thread is used. The correctness of the implementation is checked on the toy problem presented in~\cite{fuellner2021stochastic}.
+
+The only algorithm parameter to choose for SDDP is the number of samples in each forward pass, $|K|$. 
+Besides this, in BL-SDDP for the experience replay we need to choose the replay ratio mentioned above. If there is a batch of $b$ samples replayed every $z$ regular SDDP iterations, the replay ratio is $\rho = \frac{b}{z |K|}$.
+
+In both SDDP and BL-SDDP we sample in each iteration $|K| = 10$ samples. In BL-SDDP, every $z = 2$ regular iterations a batch of $b = 10$ experiences is replayed or a full batch of the whole memory is replayed. For the partial replay, as suggested in \cite{avila2023batch}, we choose either the best, worst or a random set of experiences.
+
+One can imagine the algorithms for this use case to be running on standard personal computer or even embedded in a prosumer-grade energy management system. In that case, a run-time of multiple hours as for example used in \cite{avila2023batch} on the level of a whole network would be impractical. In the similar application case of household optimization \cite{pacaud2022optimization}, for a 96 stage horizon running times around 1 minute are investigated. Since we deal with a model of similar state space size and similar horizon we allow a maximum running time of 10 minutes and use this as our termination criterion and then compare obtained optimality gaps. Once the running time limit is reached, the current backward pass is finished, so that in some cases, in particular with a full batch update, the actual running time is higher.
+The confidence-interval based criterion presented in \cite{pereira1991multi} could alternatively be used but is more suited to the case where tight optimality are more important and running time is not constrained.
+
+
+\subsection{Results}
+
+\begin{figure}[h]
+    \centering % <-- added
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{sddp_6.png}
+  \caption{SDDP}
+  \label{fig:1}
+\end{subfigure}\hfil % <-- added
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{blsddp_6_full.png}
+  \caption{BL-SDDP (F)}
+  \label{fig:2}
+\end{subfigure}\hfil % <-- added
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{blsddp_6_best.png}
+  \caption{BL-SDDP (B)}
+  \label{fig:3}
+\end{subfigure}
+
+\medskip
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{blsddp_6_worst.png}
+  \caption{BL-SDDP (W)}
+  \label{fig:4}
+\end{subfigure}\hfil % <-- added
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{blsddp_6_random.png}
+  \caption{BL-SDDP (R)}
+  \label{fig:5}
+\end{subfigure}\hfil % <-- added
+\begin{subfigure}{0.32\textwidth}
+  \includegraphics[width=\linewidth]{blsddp_6_random_3.png}
+  \caption{BL-SDDP (R, 3)}
+  \label{fig:6}
+\end{subfigure}
+\caption{Performance comparison of SDDP and the differend BL-SDDP variants}
+\label{fig: performance}
+\end{figure}
+
+The progress on the upper and lower bounds of the value functions for the different algorithms is shown in figure~\ref{fig: performance}.
+As we can see, all studied algorithms and variants manage to close the optimality gap in time, with only the noise in the upper bound due to sampling remaining. 
+
+While the upper bounds (v\_upper) are roughly comparable for each algorithm, SDDP (figure~\ref{fig:1}) manages to increase the lower bound on the value function (v\_lower) quicker than all of the BL-SDDP variants. Among the BL-SDDP variants which replay after every two regular iterations (figures~\ref{fig:2},\ref{fig:3},\ref{fig:4},\ref{fig:5}), the random (R) replaying performs best. Interestingly, replaying both the best (B) and worst (W) experiences is roughly equal and slightly worse than replaying randomly. The full batch update (F) takes longest while not compensating this through a better replay gain so that it performs worst.
+Since the random replaying performed best but still lagged behind SDDP, the effect of replaying at a lower frequency was investigated. For this we used random replaying after every three regular iteration (R, 3). Its performance is shown in figure~\ref{fig:6} and is improved compared to the other BL-SDDP variants but still lags behind the simple SDDP algorithm.
+
+
+\subsection{Discussion}
+As we can see from figure~\ref{fig: performance}, during the replaying of the respective batch of experiences, the improvement in the lower bound is smaller compared to the regular SDDP iterations, both those happening in SDDP at the same time and later in the respective variant. This means that, for the specific problem, the old experiences are on average significantly less valuable for improving the lower bound as new experiences are.
+
+While the largest performance improvements of BL-SDDP over SDDP found by Avila et al.~\cite{avila2023batch} occur in the multi-threaded case, still in the single-threaded case BL-SDDP has a slight advantage of a 2 percentage points (32\%) smaller optimality gap after 34 hours of run time.
+This raises the question how this difference in behaviour compared to the more positive findings for experience replay by Avila et al.~\cite{avila2023batch} can be explained. 
+
+Comparing the problems, the hydro-electric problem studied in \cite{avila2023batch} has a horizon ($T=120$) that is roughly in the same order of magnitude as ours. However, with 74 power plants, 25 storages and a 54-dimensional uncertain inflow, both the uncertainty and the state space have a much higher dimension than our problem.
+Depending on the state-dimensionality the trade-off between exploration and exploitation \cite{sutton2018reinforcement}, common to reinforcement learning algorithms, might shift. In high-dimensional state spaces, the valuable old experiences are sampled less often, increasing the benefit of replaying them. In smaller-dimensional state spaces, the exploitation benefit of replaying old experiences might not offset the need for exploration. Without further study this must remain a speculation however.
+
+With regards to the performance on the specific application, we can observe that SDDP is not able to solve the problem in \cite{avila2023batch} to optimality. Rather, both the upper and lower bounds improve rapidly in the first quarter of the runtime but stagnate with a considerable gap afterwards.
+Most of the improvement of BL-SDDP results from overcoming that stagnation and still finding improvements later in the runtime.
+In their study, in the beginning, replaying experience has only a small benefit and BL-SDDP progresses even slower than SDDP.
+In our case however, SDDP is not stagnating but closing the optimality gap all the way, so that the improvements of replaying early experiences late in the run time do not have an impact and only the slowing effect of replaying experiences materializes.
+
+\section{Conclusions}
+In this work, the foundations of stochastic dual dynamic programming and Q-learning with experience replay were introduced and the similarities between both approaches illuminated. This led to an explanation on how experience replay can be integrated into stochastic dual dynamic programming as suggested in \cite{avila2023batch}.
+Finally, the extensions and different variants of SDDP resulting from this integration were implemented and examined regarding their performance on an energy cost optimization problem.
+
+On this problem instance, we observed that the integration did not deliver the expected benefit over the standard SDDP algorithm.
+A possible explanation is the lower relative importance of exploitation compared to exploration resulting from the lower dimensionality of the state space.
+Moreover, our findings show that the experience replay is a burden on the performance of SDDP especially early in the run time, when regular iterations of new samples still yield large improvements in the lower bounds.
+
+Our findings suggest that when applying SDDP, early in the run time no experiences should be replayed and then later in the second half of the available run time or if the lower bound is not improving for several iterations, old experiences can be replayed with the goal of breaking the stagnation.
+Concretely, one might use an algorithmic scheme where the replay ratio rises monotonically from zero in the beginning over the available run time until it reaches a high threshold in the end, for example following a logistic curve or alternatively depending on the improvement of the lower bound.
+
+Regarding the choice which experiences to replay in general, more research is needed as our results do not clearly suggest one choice to be preferable to the others, given a fixed number replay ratio. Here new metrics to measure the value of an experience for SDDP specifically could be developed. Once these show promising results, more advanced priorisation regimes such as prioritized replay \cite{schaul2015prioritized} could be integrated into SDDP.
+
+Even though the results for experience replay are in our case not very promising, other techniques from reinforcement learning might prove valuable for an integration into stochastic dual dynamic programming.
+
+
+\printbibliography
+
+% \begin{thebibliography}{7}
+
+% \bibitem{Nic10SW}
+% \textsc{S. Nickel, O. Stein, K.-H. Waldmann,}
+% \textit{Operations Research,}
+% Springer, 2013.
+
+% $\vdots$
+
+% \end{thebibliography}
+
+\end{document}
